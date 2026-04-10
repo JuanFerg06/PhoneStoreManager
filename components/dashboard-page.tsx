@@ -5,7 +5,9 @@ import { Package, Boxes, ShoppingCart, DollarSign, AlertTriangle, TrendingUp } f
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { getDevices, getSales, getTodaySales, getTodayRevenue, getLowStockDevices, getRecentSales, type Device, type Sale } from "@/lib/store"
+import { getProducts, getLowStockProducts } from "@/lib/services/products"
+import { getTodaySales, getTodayRevenue, getRecentSales } from "@/lib/services/sales"
+import type { Device, Sale } from "@/lib/types"
 
 interface StatCardProps {
   title: string
@@ -41,31 +43,34 @@ export function DashboardPage() {
   const [todaySalesCount, setTodaySalesCount] = useState(0)
   const [todayRevenue, setTodayRevenue] = useState(0)
   const [totalStock, setTotalStock] = useState(0)
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const allDevices = getDevices()
-    setDevices(allDevices)
-    setLowStock(getLowStockDevices())
-    setRecentSales(getRecentSales(5))
-    setTodaySalesCount(getTodaySales().length)
-    setTodayRevenue(getTodayRevenue())
-    setTotalStock(allDevices.reduce((sum, d) => sum + d.quantity, 0))
+    loadDashboard()
   }, [])
 
-  // Listen for storage updates from other pages
-  useEffect(() => {
-    function handleStorageRefresh() {
-      const allDevices = getDevices()
+  async function loadDashboard() {
+    setIsLoading(true)
+    try {
+      const [allDevices, lowStockDevices, todaySales, revenue, recent] = await Promise.all([
+        getProducts(),
+        getLowStockProducts(),
+        getTodaySales(),
+        getTodayRevenue(),
+        getRecentSales(5),
+      ])
       setDevices(allDevices)
-      setLowStock(getLowStockDevices())
-      setRecentSales(getRecentSales(5))
-      setTodaySalesCount(getTodaySales().length)
-      setTodayRevenue(getTodayRevenue())
+      setLowStock(lowStockDevices)
+      setTodaySalesCount(todaySales.length)
+      setTodayRevenue(revenue)
+      setRecentSales(recent)
       setTotalStock(allDevices.reduce((sum, d) => sum + d.quantity, 0))
+    } catch {
+      // fail silently — data will show as zeros/empty
+    } finally {
+      setIsLoading(false)
     }
-    window.addEventListener("store-updated", handleStorageRefresh)
-    return () => window.removeEventListener("store-updated", handleStorageRefresh)
-  }, [])
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -78,26 +83,26 @@ export function DashboardPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Total Productos"
-          value={devices.length}
+          value={isLoading ? "—" : devices.length}
           icon={<Package className="size-5" />}
           description="Dispositivos registrados"
         />
         <StatCard
           title="Stock Total"
-          value={totalStock}
+          value={isLoading ? "—" : totalStock}
           icon={<Boxes className="size-5" />}
           description="Unidades en inventario"
         />
         <StatCard
           title="Ventas Hoy"
-          value={todaySalesCount}
+          value={isLoading ? "—" : todaySalesCount}
           icon={<ShoppingCart className="size-5" />}
           description="Transacciones del dia"
           accent
         />
         <StatCard
           title="Ingresos Hoy"
-          value={`$${todayRevenue.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+          value={isLoading ? "—" : `$${todayRevenue.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
           icon={<DollarSign className="size-5" />}
           description="Revenue del dia"
           accent
@@ -115,7 +120,11 @@ export function DashboardPage() {
             <CardDescription>Productos con 5 o menos unidades</CardDescription>
           </CardHeader>
           <CardContent>
-            {lowStock.length === 0 ? (
+            {isLoading ? (
+              <div className="flex justify-center py-4">
+                <div className="size-5 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+              </div>
+            ) : lowStock.length === 0 ? (
               <p className="py-4 text-center text-sm text-muted-foreground">Todos los productos tienen stock suficiente</p>
             ) : (
               <div className="flex flex-col gap-3">
@@ -152,7 +161,11 @@ export function DashboardPage() {
             <CardDescription>Ultimas 5 transacciones</CardDescription>
           </CardHeader>
           <CardContent>
-            {recentSales.length === 0 ? (
+            {isLoading ? (
+              <div className="flex justify-center py-4">
+                <div className="size-5 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+              </div>
+            ) : recentSales.length === 0 ? (
               <p className="py-4 text-center text-sm text-muted-foreground">No hay ventas registradas</p>
             ) : (
               <Table>

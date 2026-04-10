@@ -10,10 +10,12 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-import { getDevices, addDevice, updateDevice, type Device } from "@/lib/store"
+import { getProducts, addProduct, updateProduct } from "@/lib/services/products"
+import type { Device } from "@/lib/types"
 
 export function InventoryPage() {
   const [devices, setDevices] = useState<Device[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingDevice, setEditingDevice] = useState<Device | null>(null)
 
@@ -23,14 +25,21 @@ export function InventoryPage() {
   const [price, setPrice] = useState("")
   const [quantity, setQuantity] = useState("")
   const [formError, setFormError] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
-    setDevices(getDevices())
+    loadDevices()
   }, [])
 
-  function refreshDevices() {
-    setDevices(getDevices())
-    window.dispatchEvent(new Event("store-updated"))
+  async function loadDevices() {
+    setIsLoading(true)
+    try {
+      setDevices(await getProducts())
+    } catch (err) {
+      toast.error("Error al cargar el inventario")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   function resetForm() {
@@ -57,7 +66,7 @@ export function InventoryPage() {
     setIsDialogOpen(true)
   }
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setFormError("")
 
@@ -79,27 +88,33 @@ export function InventoryPage() {
       return
     }
 
-    if (editingDevice) {
-      updateDevice(editingDevice.id, {
-        brand: brand.trim(),
-        model: model.trim(),
-        price: priceNum,
-        quantity: qtyNum,
-      })
-      toast.success("Dispositivo actualizado exitosamente")
-    } else {
-      addDevice({
-        brand: brand.trim(),
-        model: model.trim(),
-        price: priceNum,
-        quantity: qtyNum,
-      })
-      toast.success("Dispositivo agregado exitosamente")
+    setIsSubmitting(true)
+    try {
+      if (editingDevice) {
+        await updateProduct(editingDevice.id, {
+          brand: brand.trim(),
+          model: model.trim(),
+          price: priceNum,
+          quantity: qtyNum,
+        })
+        toast.success("Dispositivo actualizado exitosamente")
+      } else {
+        await addProduct({
+          brand: brand.trim(),
+          model: model.trim(),
+          price: priceNum,
+          quantity: qtyNum,
+        })
+        toast.success("Dispositivo agregado exitosamente")
+      }
+      await loadDevices()
+      setIsDialogOpen(false)
+      resetForm()
+    } catch (err) {
+      setFormError("Error al guardar el dispositivo")
+    } finally {
+      setIsSubmitting(false)
     }
-
-    refreshDevices()
-    setIsDialogOpen(false)
-    resetForm()
   }
 
   return (
@@ -124,7 +139,11 @@ export function InventoryPage() {
           <CardDescription>{devices.length} productos en inventario</CardDescription>
         </CardHeader>
         <CardContent>
-          {devices.length === 0 ? (
+          {isLoading ? (
+            <div className="flex justify-center py-8">
+              <div className="size-6 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+            </div>
+          ) : devices.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               No hay dispositivos registrados. Agrega uno para comenzar.
             </p>
@@ -217,8 +236,10 @@ export function InventoryPage() {
               <Button type="button" variant="ghost" onClick={() => { setIsDialogOpen(false); resetForm() }} className="text-muted-foreground">
                 Cancelar
               </Button>
-              <Button type="submit" className="bg-primary text-primary-foreground hover:bg-primary/90">
-                {editingDevice ? "Guardar Cambios" : "Agregar"}
+              <Button type="submit" disabled={isSubmitting} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                {isSubmitting ? (
+                  <div className="size-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
+                ) : editingDevice ? "Guardar Cambios" : "Agregar"}
               </Button>
             </DialogFooter>
           </form>

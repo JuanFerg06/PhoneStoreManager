@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, type FormEvent } from "react"
-import { Smartphone, Eye, EyeOff, LogIn } from "lucide-react"
+import { Smartphone, Eye, EyeOff, LogIn, UserPlus } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,31 +9,39 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 export function LoginPage() {
-  const { login } = useAuth()
-  const [username, setUsername] = useState("")
+  const { login, register } = useAuth()
+  const [isRegisterMode, setIsRegisterMode] = useState(false)
+  const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError("")
 
-    if (!username.trim() || !password.trim()) {
+    if (!email.trim() || !password.trim()) {
       setError("Por favor complete todos los campos")
       return
     }
 
     setIsSubmitting(true)
-    // Small delay for UX
-    setTimeout(() => {
-      const success = login(username, password)
-      if (!success) {
-        setError("Credenciales incorrectas")
-      }
-      setIsSubmitting(false)
-    }, 400)
+    const errorMsg = isRegisterMode
+      ? await register(email, password)
+      : await login(email, password)
+
+    if (errorMsg) {
+      setError(errorMsg)
+    }
+    setIsSubmitting(false)
+  }
+
+  function switchMode() {
+    setIsRegisterMode((prev) => !prev)
+    setError("")
+    setEmail("")
+    setPassword("")
   }
 
   return (
@@ -49,8 +57,14 @@ export function LoginPage() {
 
         <Card className="border-border/60 bg-card">
           <CardHeader className="pb-4">
-            <CardTitle className="text-lg">Iniciar Sesion</CardTitle>
-            <CardDescription>Ingrese sus credenciales para acceder</CardDescription>
+            <CardTitle className="text-lg">
+              {isRegisterMode ? "Crear cuenta" : "Iniciar Sesion"}
+            </CardTitle>
+            <CardDescription>
+              {isRegisterMode
+                ? "Registra un nuevo administrador"
+                : "Ingrese sus credenciales para acceder"}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -60,14 +74,14 @@ export function LoginPage() {
                 </div>
               )}
               <div className="flex flex-col gap-2">
-                <Label htmlFor="username">Usuario</Label>
+                <Label htmlFor="email">Correo electronico</Label>
                 <Input
-                  id="username"
-                  type="text"
-                  placeholder="Ingrese su usuario"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  autoComplete="username"
+                  id="email"
+                  type="email"
+                  placeholder="admin@tienda.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
                   className="bg-secondary border-border"
                 />
               </div>
@@ -80,7 +94,7 @@ export function LoginPage() {
                     placeholder="Ingrese su contrasena"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    autoComplete="current-password"
+                    autoComplete={isRegisterMode ? "new-password" : "current-password"}
                     className="bg-secondary border-border pr-10"
                   />
                   <button
@@ -100,6 +114,11 @@ export function LoginPage() {
               >
                 {isSubmitting ? (
                   <div className="size-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
+                ) : isRegisterMode ? (
+                  <>
+                    <UserPlus className="mr-2 size-4" />
+                    Crear cuenta
+                  </>
                 ) : (
                   <>
                     <LogIn className="mr-2 size-4" />
@@ -111,8 +130,15 @@ export function LoginPage() {
           </CardContent>
         </Card>
 
-        <p className="mt-4 text-center text-xs text-muted-foreground">
-          Demo: admin / admin123
+        <p className="mt-4 text-center text-sm text-muted-foreground">
+          {isRegisterMode ? "¿Ya tienes cuenta?" : "¿No tienes cuenta?"}{" "}
+          <button
+            type="button"
+            onClick={switchMode}
+            className="text-primary hover:underline font-medium"
+          >
+            {isRegisterMode ? "Inicia sesion" : "Registrate"}
+          </button>
         </p>
       </div>
     </div>

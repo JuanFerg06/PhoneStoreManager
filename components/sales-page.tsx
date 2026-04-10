@@ -9,7 +9,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { getDevices, getSales, addSale, type Device, type Sale } from "@/lib/store"
+import { getProducts } from "@/lib/services/products"
+import { getSales, addSale } from "@/lib/services/sales"
+import type { Device, Sale } from "@/lib/types"
 
 export function SalesPage() {
   const [devices, setDevices] = useState<Device[]>([])
@@ -17,16 +19,24 @@ export function SalesPage() {
   const [selectedDeviceId, setSelectedDeviceId] = useState("")
   const [saleQuantity, setSaleQuantity] = useState("1")
   const [formError, setFormError] = useState("")
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
-    setDevices(getDevices())
-    setSales(getSales().slice().reverse())
+    loadData()
   }, [])
 
-  function refresh() {
-    setDevices(getDevices())
-    setSales(getSales().slice().reverse())
-    window.dispatchEvent(new Event("store-updated"))
+  async function loadData() {
+    setIsLoading(true)
+    try {
+      const [prods, salesData] = await Promise.all([getProducts(), getSales()])
+      setDevices(prods)
+      setSales(salesData)
+    } catch {
+      toast.error("Error al cargar los datos")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const selectedDevice = devices.find((d) => d.id === selectedDeviceId) ?? null
@@ -39,7 +49,7 @@ export function SalesPage() {
   const exceedsStock = selectedDevice !== null && qty > selectedDevice.quantity
   const canSell = selectedDevice !== null && qty > 0 && !isOutOfStock && !exceedsStock
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setFormError("")
 
@@ -65,7 +75,8 @@ export function SalesPage() {
       return
     }
 
-    const result = addSale({
+    setIsSubmitting(true)
+    const result = await addSale({
       deviceId: selectedDevice.id,
       deviceBrand: selectedDevice.brand,
       deviceModel: selectedDevice.model,
@@ -77,13 +88,15 @@ export function SalesPage() {
 
     if ("error" in result) {
       setFormError(result.error)
+      setIsSubmitting(false)
       return
     }
 
     toast.success("Venta registrada exitosamente")
     setSelectedDeviceId("")
     setSaleQuantity("1")
-    refresh()
+    await loadData()
+    setIsSubmitting(false)
   }
 
   return (
@@ -168,11 +181,17 @@ export function SalesPage() {
 
               <Button
                 type="submit"
-                disabled={!canSell}
+                disabled={!canSell || isSubmitting}
                 className="w-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               >
-                <ShoppingCart className="mr-2 size-4" />
-                {isOutOfStock ? "Sin Stock" : "Registrar Venta"}
+                {isSubmitting ? (
+                  <div className="size-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
+                ) : (
+                  <>
+                    <ShoppingCart className="mr-2 size-4" />
+                    {isOutOfStock ? "Sin Stock" : "Registrar Venta"}
+                  </>
+                )}
               </Button>
             </form>
           </CardContent>
@@ -188,7 +207,11 @@ export function SalesPage() {
             <CardDescription>{sales.length} transacciones registradas</CardDescription>
           </CardHeader>
           <CardContent>
-            {sales.length === 0 ? (
+            {isLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="size-6 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+              </div>
+            ) : sales.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
                 No hay ventas registradas aun
               </p>

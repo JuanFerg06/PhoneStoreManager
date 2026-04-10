@@ -1,43 +1,62 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
+import type { User } from "@supabase/supabase-js"
+import { supabase } from "@/lib/supabase"
 
 interface AuthContextType {
+  user: User | null
   isAuthenticated: boolean
-  login: (username: string, password: string) => boolean
-  logout: () => void
+  login: (email: string, password: string) => Promise<string | null>
+  register: (email: string, password: string) => Promise<string | null>
+  logout: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
-const MOCK_USER = "admin"
-const MOCK_PASS = "admin123"
-const AUTH_KEY = "phonestore_auth"
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const stored = localStorage.getItem(AUTH_KEY)
-    if (stored === "true") {
-      setIsAuthenticated(true)
-    }
-    setIsLoading(false)
+    // Restore session on mount
+    supabase.auth.getSession().then(({ data }) => {
+      setUser(data.session?.user ?? null)
+      setIsLoading(false)
+    })
+
+    // Keep state in sync with Supabase auth events
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
+
+    return () => subscription.unsubscribe()
   }, [])
 
-  function login(username: string, password: string): boolean {
-    if (username === MOCK_USER && password === MOCK_PASS) {
-      setIsAuthenticated(true)
-      localStorage.setItem(AUTH_KEY, "true")
-      return true
+  async function login(email: string, password: string): Promise<string | null> {
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) {
+      if (error.message.includes("Invalid login credentials")) {
+        return "Credenciales incorrectas"
+      }
+      return error.message
     }
-    return false
+    return null
   }
 
-  function logout() {
-    setIsAuthenticated(false)
-    localStorage.removeItem(AUTH_KEY)
+  async function register(email: string, password: string): Promise<string | null> {
+    const { error } = await supabase.auth.signUp({ email, password })
+    if (error) {
+      if (error.message.includes("already registered")) {
+        return "Este correo ya está registrado"
+      }
+      return error.message
+    }
+    return null
+  }
+
+  async function logout(): Promise<void> {
+    await supabase.auth.signOut()
   }
 
   if (isLoading) {
@@ -49,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, login, logout }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   )
